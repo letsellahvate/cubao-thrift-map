@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cubao Ukay-Ukay & Frames Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<style>
+  :root{
+    --thrift:#2563eb; --frames:#ea580c; --far:#64748b; --bg:#0f172a; --card:#1e293b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  #wrap{display:flex;height:100vh;flex-direction:row}
+  #sidebar{width:340px;max-width:42%;background:var(--bg);color:#e2e8f0;overflow-y:auto;flex-shrink:0}
+  #map{flex:1;min-width:0}
+  header{padding:16px 18px;border-bottom:1px solid #334155;position:sticky;top:0;background:var(--bg);z-index:5}
+  header h1{font-size:18px;line-height:1.25}
+  header p{font-size:12px;color:#94a3b8;margin-top:4px}
+  .legend{display:flex;gap:12px;margin-top:10px;font-size:11px;flex-wrap:wrap}
+  .legend span{display:flex;align-items:center;gap:5px}
+  .dot{width:11px;height:11px;border-radius:50%;display:inline-block}
+  .list{padding:8px}
+  .item{background:var(--card);border-radius:10px;padding:12px 13px;margin-bottom:8px;cursor:pointer;border-left:4px solid var(--thrift);transition:.15s}
+  .item:hover{background:#334155;transform:translateX(2px)}
+  .item.frames{border-left-color:var(--frames)}
+  .item.far{border-left-color:var(--far)}
+  .item h3{font-size:14px;margin-bottom:3px}
+  .item .meta{font-size:11px;color:#94a3b8;margin-bottom:5px}
+  .item p{font-size:12px;color:#cbd5e1;line-height:1.4}
+  .badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:20px;margin-top:6px;margin-right:4px}
+  .badge.f{background:#7c2d12;color:#fed7aa}
+  .badge.t{background:#1e3a8a;color:#bfdbfe}
+  .note{font-size:11px;color:#fbbf24;padding:10px 14px;background:#422006;margin:8px;border-radius:8px;line-height:1.4}
+  #locateBtn{margin-top:12px;width:100%;padding:10px;border:0;border-radius:8px;background:#16a34a;color:#fff;font-size:13px;font-weight:600;cursor:pointer}
+  #locateBtn:hover{background:#15803d}
+  #locateBtn:disabled{background:#334155;cursor:default}
+  #routeInfo{margin-top:10px;font-size:12px;color:#a7f3d0;line-height:1.5;display:none}
+  #routeInfo.show{display:block}
+  #routeInfo b{color:#fff}
+  .leaflet-popup-content{font-family:inherit;font-size:13px;line-height:1.45}
+  .leaflet-popup-content b{font-size:14px}
+  .leaflet-popup-content a{color:#2563eb;font-weight:600;text-decoration:none}
+  .pin{border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+  @media(max-width:640px){
+    #wrap{flex-direction:column}
+    #sidebar{width:100%;max-width:100%;height:45%;order:2}
+    #map{height:55%;order:1}
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="sidebar">
+    <header>
+      <h1>🧥👓 Cubao Ukay-Ukay & Frames Map</h1>
+      <p>Thrift stores + where to hunt for eyeglass frames. Tap a card to zoom the map.</p>
+      <div class="legend">
+        <span><i class="dot" style="background:var(--thrift)"></i>Thrift / ukay</span>
+        <span><i class="dot" style="background:var(--frames)"></i>Good for frames</span>
+        <span><i class="dot" style="background:var(--far)"></i>Farther trip</span>
+        <span><i class="dot" style="background:#16a34a"></i>You</span>
+      </div>
+      <button id="locateBtn">📍 Find my location</button>
+      <div id="routeInfo"></div>
+    </header>
+    <div class="note">⚠️ Pins are approximate — small ukay shops move &amp; change hours often. Verify before a long trip (call / check FB).</div>
+    <div class="list" id="list"></div>
+  </div>
+  <div id="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+const stores = [
+  { name:"Anonas Ukay-Ukay", type:"thrift", frames:false,
+    coords:[14.6266,121.0666], meta:"972 Aurora Blvd · beside LRT-2 Anonas Station",
+    desc:"The biggest stop — 4 storeys, ~15 stores of pre-loved clothes, shoes & accessories at pocket-friendly prices. Easiest to reach via LRT-2 Anonas.",
+    tags:["thrift"] },
+  { name:"Hansel Arcade", type:"frames", frames:true,
+    coords:[14.6188,121.0524], meta:"Aurora Blvd, near cor. Gen. Aguinaldo · across Isetann",
+    desc:"Old building (look for sign above the dead escalators). Goldmine for streetwear, basics & rare vintage. BEST bet for vintage frames & sunglasses.",
+    tags:["thrift","frames"] },
+  { name:"Kabunyan", type:"thrift", frames:false,
+    coords:[14.6189,121.0526], meta:"2nd floor, Hansel Arcade",
+    desc:"Spacious, air-conditioned, well-sorted by type & price. Western brands (Mango) + Japan-made items.",
+    tags:["thrift"] },
+  { name:"Fleur De Lis", type:"thrift", frames:false,
+    coords:[14.6193,121.0512], meta:"Ground floor, ACT building (right from EDSA to Aurora)",
+    desc:"Open, air-conditioned, well-organised. Mostly women's clothing.",
+    tags:["thrift"] },
+  { name:"Dress Up Store", type:"thrift", frames:false,
+    coords:[14.6210,121.0548], meta:"Old ACT Theatre building, past Eurotel",
+    desc:"Big 'wagwagan' center — L-shaped ground floor + huge 2nd floor. Winter clothes, formal wear, even wedding gowns.",
+    tags:["thrift"] },
+  { name:"Desabel", type:"thrift", frames:false,
+    coords:[14.6199,121.0525], meta:"Opulent bldg, Gen. Roxas Ave cor. EDSA · across Farmers Market",
+    desc:"Same row as VC Trading fabrics, across the Cubao–Antipolo UV terminal. Handy first stop near Farmers.",
+    tags:["thrift"] },
+  { name:"WCHA", type:"thrift", frames:false,
+    coords:[14.6205,121.0556], meta:"Start of Cubao Expo (Cubao X)",
+    desc:"Curated, trendy branded pieces. Ground-floor shoes/clothes + 2 rooms upstairs, air-conditioned. Good for Converse & streetwear gems.",
+    tags:["thrift"] },
+  { name:"Cubao Expo (Cubao X) stalls", type:"frames", frames:true,
+    coords:[14.6204,121.0557], meta:"General Romulo Ave / Gen. Aguinaldo",
+    desc:"Cluster of small vintage/thrift + accessory shops. More curated (a bit pricier) but great for unique frames & vintage accessories.",
+    tags:["thrift","frames"] },
+  { name:"Farmers Plaza / Ali Mall optical stalls", type:"frames", frames:true,
+    coords:[14.6216,121.0535], meta:"Araneta City, Cubao",
+    desc:"Not ukay — but has cheap optical stalls for budget frames + on-the-spot lens fitting. Good backup if ukay frames don't pan out.",
+    tags:["frames"] },
+  { name:"Riverbanks Center", type:"far", frames:false,
+    coords:[14.6316,121.0787], meta:"A. Bonifacio Ave, Marikina (~15–20 min from Cubao)",
+    desc:"Outlet + bargain stalls: clothes, bags, shoes, accessories, home items. Worth it if you have extra time.",
+    tags:["thrift"] },
+];
+
+const map = L.map('map').setView([14.6210,121.0545], 15);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  maxZoom:19, attribution:'&copy; OpenStreetMap contributors'
+}).addTo(map);
+
+const colors = { thrift:'#2563eb', frames:'#ea580c', far:'#64748b' };
+const markers = [];
+
+function makeIcon(color){
+  return L.divIcon({
+    className:'', html:`<div class="pin" style="background:${color};width:18px;height:18px"></div>`,
+    iconSize:[18,18], iconAnchor:[9,9], popupAnchor:[0,-10]
+  });
+}
+
+const listEl = document.getElementById('list');
+let userLatLng = null, userMarker = null, routeLine = null;
+
+function gmapsUrl(s){
+  const origin = userLatLng ? `&origin=${userLatLng.lat},${userLatLng.lng}` : '';
+  return `https://www.google.com/maps/dir/?api=1${origin}&destination=${s.coords[0]},${s.coords[1]}`;
+}
+
+stores.forEach((s,i)=>{
+  const color = colors[s.type];
+  const badges = s.tags.map(t=> t==='frames'
+      ? '<span class="badge f">👓 frames</span>'
+      : '<span class="badge t">🧥 thrift</span>').join('');
+  const m = L.marker(s.coords,{icon:makeIcon(color)}).addTo(map);
+  s._marker = m;
+  m.bindPopup(''); // filled on open so origin is current
+  m.on('popupopen',()=> m.setPopupContent(
+    `<b>${s.name}</b><br><span style="color:#64748b;font-size:11px">${s.meta}</span><br><br>${s.desc}<br><br>${badges}<br><br><a href="${gmapsUrl(s)}" target="_blank">➜ Directions (Google Maps)</a>`));
+  markers.push(m);
+
+  const card = document.createElement('div');
+  card.className = 'item ' + (s.type==='frames'?'frames':s.type==='far'?'far':'');
+  card.innerHTML = `<h3>${i+1}. ${s.name}</h3><div class="meta">${s.meta}</div><p>${s.desc}</p>${badges}`;
+  card.onclick = ()=>{
+    if(userLatLng){ showRoute(s); }
+    else { map.flyTo(s.coords,17,{duration:.6}); m.openPopup(); }
+  };
+  listEl.appendChild(card);
+});
+
+map.fitBounds(L.featureGroup(markers).getBounds().pad(0.15));
+
+// ---- Geolocation + routing --------------------------------------------
+const btn = document.getElementById('locateBtn');
+const info = document.getElementById('routeInfo');
+
+btn.onclick = ()=>{
+  if(!navigator.geolocation){ alert('Geolocation not supported on this browser.'); return; }
+  btn.disabled = true; btn.textContent = '📍 Locating…';
+  navigator.geolocation.getCurrentPosition(pos=>{
+    userLatLng = {lat:pos.coords.latitude, lng:pos.coords.longitude};
+    if(userMarker) map.removeLayer(userMarker);
+    userMarker = L.marker([userLatLng.lat,userLatLng.lng],{icon:makeIcon('#16a34a')})
+      .addTo(map).bindPopup('<b>📍 You are here</b>').openPopup();
+    map.flyTo([userLatLng.lat,userLatLng.lng],14,{duration:.8});
+    btn.disabled = false; btn.textContent = '📍 Update my location';
+    info.className='show'; info.innerHTML='✅ Found you! Now tap any store to see the route.';
+  }, err=>{
+    btn.disabled=false; btn.textContent='📍 Find my location';
+    alert('Could not get location: '+err.message+'\n\n(On desktop this can be rough; try on your phone with GPS + location permission on.)');
+  }, {enableHighAccuracy:true, timeout:10000});
+};
+
+function haversine(a,b){
+  const R=6371, toR=x=>x*Math.PI/180;
+  const dLat=toR(b[0]-a[0]), dLon=toR(b[1]-a[1]);
+  const h=Math.sin(dLat/2)**2 + Math.cos(toR(a[0]))*Math.cos(toR(b[0]))*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(h),Math.sqrt(1-h));
+}
+
+async function showRoute(s){
+  if(!userLatLng) return;
+  const from=[userLatLng.lat,userLatLng.lng], to=s.coords;
+  if(routeLine) map.removeLayer(routeLine);
+  info.className='show'; info.innerHTML=`Routing to <b>${s.name}</b>…`;
+  s._marker.openPopup();
+  try{
+    const url=`https://router.project-osrm.org/route/v1/driving/${from[1]},${from[0]};${to[1]},${to[0]}?overview=full&geometries=geojson`;
+    const r=await fetch(url); const d=await r.json();
+    if(d.code!=='Ok') throw new Error('no route');
+    const route=d.routes[0];
+    const line=route.geometry.coordinates.map(c=>[c[1],c[0]]);
+    routeLine=L.polyline(line,{color:'#16a34a',weight:5,opacity:.8}).addTo(map);
+    map.fitBounds(routeLine.getBounds().pad(0.2));
+    const km=(route.distance/1000).toFixed(1);
+    const min=Math.round(route.duration/60);
+    info.innerHTML=`🚗 <b>${s.name}</b><br>${km} km · ~${min} min by car<br><a href="${gmapsUrl(s)}" target="_blank" style="color:#6ee7b7;font-weight:600">➜ Open turn-by-turn in Google Maps</a>`;
+  }catch(e){
+    // fallback: straight line + crow-flies distance
+    routeLine=L.polyline([from,to],{color:'#16a34a',weight:4,dashArray:'8,8',opacity:.7}).addTo(map);
+    map.fitBounds(routeLine.getBounds().pad(0.2));
+    const km=haversine(from,to).toFixed(1);
+    info.innerHTML=`📏 <b>${s.name}</b><br>~${km} km (straight line — road route unavailable)<br><a href="${gmapsUrl(s)}" target="_blank" style="color:#6ee7b7;font-weight:600">➜ Open in Google Maps</a>`;
+  }
+}
+</script>
+</body>
+</html>
