@@ -28,8 +28,8 @@ python3 -m http.server 8000
 
 ## Stack
 
-HTML, CSS and vanilla JavaScript, with [Leaflet](https://leafletjs.com/) 1.9.4
-, OpenStreetMap tiles and OSRM routing. Hosted on GitHub Pages.
+HTML, CSS and vanilla JavaScript, with [Leaflet](https://leafletjs.com/) 1.9.4,
+OpenStreetMap tiles and OSRM routing. Hosted on GitHub Pages.
 
 ## Note
 
